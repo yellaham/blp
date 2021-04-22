@@ -7,12 +7,13 @@ class AgeStructuredModel:
     A class which contains all necessary methods for analyzing an age-structured model for Adelie penguin colonies.
     Objects are initialized by the number of assumed adult stages and the demographic parameters.
     """
-    def __init__(self, psi_juv, psi_adu, alpha_r, beta_r, phi, nstage):
+    def __init__(self, psi_juv, psi_adu, alpha_r, beta_r, phi_0, phi_1, nstage):
         self.juvenile_survival = psi_juv                # Juvenile Survival Rate
         self.adult_survival = psi_adu                   # Adult Survival Rate
         self.reproductive_success_bias = alpha_r        # Reproductive Success (logit bias)
         self.reproductive_success_slope = beta_r        # Reproductive Success (logit slope)
-        self.immigration_rate = phi                     # Immigration Rate
+        self.immigration_bias = phi_0                   # Immigration Rate (Bias)
+        self.immigration_slope = phi_1                  # Immigration Rate (Slope)
         self.num_stages = nstage                        # Number of stages
 
         # Compute reproductive rates in logit space
@@ -31,6 +32,7 @@ class AgeStructuredModel:
         :return state
         """
         if len(np.shape(old_state)) == 1:
+            num_samples = 1
             state = np.zeros(2*self.num_stages-2)
         else:
             # Determine the number of samples
@@ -39,7 +41,7 @@ class AgeStructuredModel:
             state = np.zeros((2*self.num_stages-2, num_samples))
         # Obtain reproductive rate in real space by applying sigmoid transformation
         pr = self.reproductive_rates
-        # Compute the total number of chicks
+        # Compute the total number of chicks and breeders
         ct_old = np.sum(old_state[-(self.num_stages-2):], axis=0)
         # From total number of chicks to state 1 adults
         state[0] = np.array(np.random.binomial((ct_old/2).astype(int), self.juvenile_survival)).flatten()
@@ -49,8 +51,10 @@ class AgeStructuredModel:
             if j < self.num_stages-2:
                 state[j+1] = np.random.binomial(old_state[j].astype(int), self.adult_survival)
                 # For the youngest breeding stage, take into account immigration
-                if j == 2:
-                    state[j+1] += np.random.poisson(self.immigration_rate, num_samples)
+                if j == 1:
+                    avg_immigrants = self.immigration_bias + self.immigration_slope*(np.sum(old_state, axis=0))
+                    avg_immigrants = np.maximum(avg_immigrants, 1e-15)
+                    state[j+1] += np.random.poisson(avg_immigrants, num_samples)
             else:
                 state[j+1] = np.random.binomial((old_state[j]+old_state[j+1]).astype(int), self.adult_survival)
             # Obtain the chicks for the penguins that can breed
@@ -62,7 +66,7 @@ class AgeStructuredModel:
     def transition_log_pdf(self, state, old_state):
         """
         Evaluate the logarithm of the transition distribution for the age-structured penguin model.
-        :param old_state: Latent penguin populations (previous year)
+        :param state: Latent penguin populations (previous year)
             - state[:, :num_stages] references the stage 1 to stage J adult penguins
             - state[:, -num_stages-2:] references the stage 1 to stage J-2 chicks
         :param old_state: Latent penguin populations (previous year)
@@ -96,7 +100,7 @@ class AgeStructuredModel:
                                                   p=self.reproductive_rates[j-1])
         return log_transition
 
-    def observation_rand(self, x, err_adults, err_chicks):
+    def observation_rand(self, x, err_adults=0.1, err_chicks=0.1):
         """
         Generates noisy observations for latent penguin populations
         :param x: Latent penguin populations of the current year
@@ -117,6 +121,8 @@ class AgeStructuredModel:
         # Generate observations
         y[0] = np.random.normal(loc=st, scale=err_adults*st)
         y[1] = np.random.normal(loc=ct, scale=err_chicks*ct)
+        # y[0] = np.random.lognormal(mean=np.log(st), sigma=err_adults)
+        # y[1] = np.random.lognormal(mean=np.log(ct), sigma=err_chicks)
         return y.astype(int)
 
     def observation_log_pdf(self, obs, state):
@@ -139,11 +145,13 @@ class AgeStructuredModel:
             num_samples = np.shape(state)[1]
             log_observation = np.zeros(num_samples)
         # Extract the total number of breeders and chicks
-        st = np.sum(state[2:self.num_stages], axis=0)            # total number of breeders
+        st = np.sum(state[2:self.num_stages], axis=0)         # total number of breeders
         ct = np.sum(state[-(self.num_stages-2):], axis=0)     # total number of chicks
         # Evaluate log pdf of the observations
         if ~np.isnan(obs[0]):
+            # log_observation = sp.lognorm(s=obs[2], scale=st).logpdf(obs[0])
             log_observation += sp.norm.logpdf(obs[0], loc=st, scale=obs[2]*st)
         if ~np.isnan(obs[1]):
+            # log_observation = sp.lognorm(s=obs[3], scale=ct).logpdf(obs[1])
             log_observation += sp.norm.logpdf(obs[1], loc=ct, scale=obs[3]*ct)
         return log_observation
