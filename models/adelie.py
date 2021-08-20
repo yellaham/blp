@@ -91,7 +91,7 @@ class AgeStructuredModel:
                                                   p=self.reproductive_rates[j-1])
         return log_transition
 
-    def observation_rand(self, x, err_adults, err_chicks):
+    def observation_rand(self, x, err_adults=0.1, err_chicks=0.1):
         """
         Generates noisy observations for latent penguin populations
         :param x: Latent penguin populations of the current year

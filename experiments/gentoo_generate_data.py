@@ -59,4 +59,4 @@ data = np.ones((time_steps, 4))*0.1
 data[:, :2] = y
 print(data)
 # Save the data
-np.savez('simulated_data.npz', data=data, true_parameters=param)
+np.savez('gentoo_simulated_data.npz', data=data, true_parameters=param)

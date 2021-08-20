@@ -5,7 +5,7 @@ from models import gentoo
 from algorithms import pf
 import seaborn as sns
 
-id = 'synthetic'
+id = 'biscoe'
 
 with np.load(id+'.npz', allow_pickle=True) as summary:
     data = summary['data']
@@ -17,6 +17,12 @@ with np.load(id+'.npz', allow_pickle=True) as summary:
 # Obtain the predictive distribution
 num_samples = np.shape(sampled_parameters)[0]   # Number of trajectories to sample
 time_steps = np.shape(data)[0]
+
+# Compute percentage missing
+missing_breeders = np.sum(np.isnan(data[:, 0]))/time_steps
+missing_chicks = np.sum(np.isnan(data[:, 1]))/time_steps
+print(time_steps)
+print('(%.2f, %.2f)' % (missing_breeders, missing_chicks))
 
 # Initialize the observations
 num_trajectories = 200
@@ -90,6 +96,8 @@ plt.show()
 # plt.show()
 
 # Plot all of the one-dimensional histograms
+posterior_mean = np.zeros(dim)
+credible_intervals = np.zeros((dim, 2))
 for i in range(dim):
     # 1. First get a KDE
     est_post = sp.gaussian_kde(sampled_parameters[:, i])
@@ -127,6 +135,15 @@ for i in range(dim):
     filename = filename.replace(' ', '_').lower()
     plt.savefig('../figures/gentoo/' + filename + '.pdf', format='pdf')
     plt.show()
+    # Compute the posterior mean along with the CIs of all parameters
+    posterior_mean[i] = np.mean(sampled_parameters[:, i])
+    print('Posterior Mean for theta['+str(i+1)+'] = ', posterior_mean[i])
+    # Compute the 95% confidence intervals
+    credible_intervals[i, 0] = np.quantile(sampled_parameters[:, i], 0.025)
+    credible_intervals[i, 1] = np.quantile(sampled_parameters[:, i], 0.975)
+    print('Credible Interval for theta['+str(i+1)+'] = ', credible_intervals[i])
+    print('Prior-Posterior Overlap for theta['+str(i+1)+'] = ', overlap)
+    print('')
 
 
 # # Plot all of the two-dimensional histograms
